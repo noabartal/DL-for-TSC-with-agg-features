@@ -1,30 +1,33 @@
-# FCN model
+# CNN_TSFRESH model
 # when tuning start with learning rate->mini_batch_size -> 
 # momentum-> #hidden_units -> # learning_rate_decay -> #layers 
 import tensorflow.keras as keras
 import tensorflow as tf
 import numpy as np
 import time 
-
+import pandas as pd
 from utils.utils import save_logs
 from utils.utils import calculate_metrics
 
-class Classifier_FCN:
 
-	def __init__(self, output_directory, input_shape, nb_classes, verbose=False,build=True):
+class Classifier_CNN_TSFRESH:
+
+	def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, input_agg=None):
 		self.output_directory = output_directory
+
 		if build == True:
-			self.model = self.build_model(input_shape, nb_classes)
-			if(verbose==True):
+			self.model = self.build_model(input_shape, nb_classes, input_agg=input_agg)
+			if verbose:
 				self.model.summary()
 			self.verbose = verbose
 			self.model.save_weights(self.output_directory+'model_init.hdf5')
 		return
 
-	def build_model(self, input_shape, nb_classes):
-		input_layer = keras.layers.Input(input_shape)
+	def build_model(self, input_raw, nb_classes, input_agg):
+		input_layer_raw = keras.layers.Input(input_raw)
+		input_layer_agg = keras.layers.Input(shape=input_agg)
 
-		conv1 = keras.layers.Conv1D(filters=128, kernel_size=8, padding='same')(input_layer)
+		conv1 = keras.layers.Conv1D(filters=128, kernel_size=8, padding='same')(input_layer_raw)
 		conv1 = keras.layers.BatchNormalization()(conv1)
 		conv1 = keras.layers.Activation(activation='relu')(conv1)
 
@@ -38,15 +41,18 @@ class Classifier_FCN:
 
 		gap_layer = keras.layers.GlobalAveragePooling1D()(conv3)
 
-		output_layer = keras.layers.Dense(nb_classes, activation='softmax')(gap_layer)
+		z = keras.layers.Concatenate()([gap_layer, input_layer_agg])
 
-		model = keras.models.Model(inputs=input_layer, outputs=output_layer)
+		output_layer = keras.layers.Dense(nb_classes, activation='softmax')(z)
+
+		model = keras.models.Model(inputs=[input_layer_raw, input_layer_agg], outputs=output_layer)
 
 		model.compile(loss='categorical_crossentropy', optimizer = keras.optimizers.Adam(), 
 			metrics=['accuracy'])
 
-		reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50, 
+		reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50,
 			min_lr=0.0001)
+
 		e_s = keras.callbacks.EarlyStopping(monitor='loss', patience=60)
 
 		file_path = self.output_directory+'best_model.hdf5'
@@ -54,11 +60,13 @@ class Classifier_FCN:
 		model_checkpoint = keras.callbacks.ModelCheckpoint(filepath=file_path, monitor='loss', 
 			save_best_only=True)
 
-		self.callbacks = [reduce_lr,model_checkpoint, e_s]
+		self.callbacks = [reduce_lr, model_checkpoint, e_s]
 
-		return model 
+		return model
 
-	def fit(self, x_train, y_train, x_val, y_val,y_true):
+
+	def fit(self, x_train, y_train, x_val, y_val, y_true, x_train_agg, x_val_agg):
+
 		if not tf.test.is_gpu_available:
 			print('error')
 			exit()
@@ -70,8 +78,8 @@ class Classifier_FCN:
 
 		start_time = time.time() 
 
-		hist = self.model.fit(x_train, y_train, batch_size=mini_batch_size, epochs=nb_epochs,
-			verbose=self.verbose, validation_data=(x_val,y_val), callbacks=self.callbacks)
+		hist = self.model.fit([x_train, x_train_agg], y_train, batch_size=mini_batch_size, epochs=nb_epochs,
+			verbose=self.verbose, validation_data=([x_val, x_val_agg], y_val), callbacks=self.callbacks)
 		
 		duration = time.time() - start_time
 
@@ -79,16 +87,16 @@ class Classifier_FCN:
 
 		model = keras.models.load_model(self.output_directory+'best_model.hdf5')
 
-		y_pred = model.predict(x_val)
+		y_pred = model.predict([x_val, x_val_agg])
 
 		# convert the predicted from binary to integer 
-		y_pred = np.argmax(y_pred , axis=1)
+		y_pred = np.argmax(y_pred, axis=1)
 
-		save_logs(self.output_directory, hist, y_pred, y_true, duration)
+		save_logs(self.output_directory, hist, y_pred, y_true, duration, lr=False)
 
 		keras.backend.clear_session()
 
-	def predict(self, x_test, y_true,x_train,y_train,y_test,return_df_metrics = True):
+	def predict(self, x_test, y_true, x_train, y_train, y_test, return_df_metrics = True):
 		model_path = self.output_directory + 'best_model.hdf5'
 		model = keras.models.load_model(model_path)
 		y_pred = model.predict(x_test)

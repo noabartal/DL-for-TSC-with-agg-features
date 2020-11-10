@@ -13,17 +13,17 @@ import utils
 from utils.constants import CLASSIFIERS
 from utils.constants import ARCHIVE_NAMES
 from utils.constants import ITERATIONS
-from utils.utils import read_all_datasets
+from utils.utils import read_all_datasets, create_agg_tsfresh, feature_selection
 
 
-def fit_classifier():
+def fit_classifier(input_path):
     x_train = datasets_dict[dataset_name][0]
     y_train = datasets_dict[dataset_name][1]
     x_test = datasets_dict[dataset_name][2]
     y_test = datasets_dict[dataset_name][3]
 
     nb_classes = len(np.unique(np.concatenate((y_train, y_test), axis=0)))
-
+    print(f"number of classes {nb_classes}")
     # transform the labels from integers to one hot vectors
     enc = sklearn.preprocessing.OneHotEncoder(categories='auto')
     enc.fit(np.concatenate((y_train, y_test), axis=0).reshape(-1, 1))
@@ -39,12 +39,22 @@ def fit_classifier():
         x_test = x_test.reshape((x_test.shape[0], x_test.shape[1], 1))
 
     input_shape = x_train.shape[1:]
-    classifier = create_classifier(classifier_name, input_shape, nb_classes, output_directory)
+    if classifier_name == 'my_model':
+        x_train_agg, y_train_max, x_val_agg, y_val_max = create_agg_tsfresh(x_train, y_train, x_test, y_test, input_path)
+        x_train_agg_filtered, x_val_agg_filtered = feature_selection(x_train_agg, y_train_max,
+                                                                     x_val_agg, y_val_max, input_path)
+        classifier = create_classifier(classifier_name, input_shape, nb_classes, output_directory,
+                                       input_agg=x_train_agg_filtered.shape[1:], verbose=2)
+        classifier.fit(x_train, y_train, x_test, y_test, y_true,  x_train_agg_filtered, x_val_agg_filtered)
+    else:
+        classifier = create_classifier(classifier_name, input_shape, nb_classes, output_directory)
+        classifier.fit(x_train, y_train, x_test, y_test, y_true)
 
-    classifier.fit(x_train, y_train, x_test, y_test, y_true)
 
-
-def create_classifier(classifier_name, input_shape, nb_classes, output_directory, verbose=False):
+def create_classifier(classifier_name, input_shape, nb_classes, output_directory, verbose=False, input_agg=10):
+    if classifier_name == 'my_model':
+        from classifiers import my_model_1
+        return my_model_1.Classifier_CNN_TSFRESH(output_directory, input_shape, nb_classes, verbose, input_agg=input_agg)
     if classifier_name == 'fcn':
         from classifiers import fcn
         return fcn.Classifier_FCN(output_directory, input_shape, nb_classes, verbose)
@@ -80,7 +90,7 @@ def create_classifier(classifier_name, input_shape, nb_classes, output_directory
 ############################################### main
 
 # change this directory for your machine
-root_dir = '/b/home/uha/hfawaz-datas/dl-tsc-temp/'
+root_dir = 'D:\Thesis\dl-4-tsc/'
 
 if sys.argv[1] == 'run_all':
     for classifier_name in CLASSIFIERS:
@@ -107,7 +117,7 @@ if sys.argv[1] == 'run_all':
 
                     create_directory(output_directory)
 
-                    fit_classifier()
+                    fit_classifier(root_dir + '/archives/' + archive_name + '/' + dataset_name + '/')
 
                     print('\t\t\t\tDONE')
 
@@ -125,6 +135,7 @@ elif sys.argv[1] == 'viz_cam':
 elif sys.argv[1] == 'generate_results_csv':
     res = generate_results_csv('results.csv', root_dir)
     print(res.to_string())
+
 else:
     # this is the code used to launch an experiment on a dataset
     archive_name = sys.argv[1]
@@ -132,26 +143,28 @@ else:
     classifier_name = sys.argv[3]
     itr = sys.argv[4]
 
-    if itr == '_itr_0':
-        itr = ''
+    print('\tarchive_name', archive_name)
 
-    output_directory = root_dir + '/results/' + classifier_name + '/' + archive_name + itr + '/' + \
-                       dataset_name + '/'
+    datasets_dict = read_all_datasets(root_dir, archive_name)
 
-    test_dir_df_metrics = output_directory + 'df_metrics.csv'
+    for iter in range(ITERATIONS):
+        print('\t\titer', iter)
 
-    print('Method: ', archive_name, dataset_name, classifier_name, itr)
+        trr = ''
+        if iter != 0:
+            trr = '_itr_' + str(iter)
 
-    if os.path.exists(test_dir_df_metrics):
-        print('Already done')
-    else:
+        tmp_output_directory = root_dir + '/results/' + classifier_name + '/' + archive_name + trr + '/'
+        for dataset_name in utils.constants.MTS_DATASET_NAMES:
+            print('\t\t\tdataset_name: ', dataset_name)
 
-        create_directory(output_directory)
-        datasets_dict = read_dataset(root_dir, archive_name, dataset_name)
+            output_directory = tmp_output_directory + dataset_name + '/'
 
-        fit_classifier()
+            create_directory(output_directory)
 
-        print('DONE')
+            fit_classifier(root_dir + '/archives/' + archive_name + '/' + dataset_name + '/')
 
-        # the creation of this directory means
-        create_directory(output_directory + '/DONE')
+            print('\t\t\t\tDONE')
+
+            # the creation of this directory means
+            create_directory(output_directory + '/DONE')

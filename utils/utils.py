@@ -3,13 +3,14 @@ import numpy as np
 import pandas as pd
 import matplotlib
 
-matplotlib.use('agg')
+# matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 matplotlib.rcParams['font.family'] = 'sans-serif'
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
 import os
 import operator
+from CFSmethod.CFS import fcbf
 
 import utils
 
@@ -24,9 +25,22 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.preprocessing import LabelEncoder
-
+from sklearn.feature_selection import SelectKBest, chi2
+from sklearn.preprocessing import MinMaxScaler
 from scipy.interpolate import interp1d
 from scipy.io import loadmat
+from tsfresh import select_features, extract_features, extract_relevant_features
+from tsfresh.feature_extraction import MinimalFCParameters, EfficientFCParameters, ComprehensiveFCParameters
+from matplotlib import pyplot
+
+def df_from_3d_np(data):
+    data_out = np.column_stack((np.repeat(np.arange(data.shape[0]), data.shape[1]),
+                                np.tile(np.arange(data.shape[1]), data.shape[0]),
+                                data.reshape(data.shape[0] * data.shape[1], -1)))
+
+    data_df = pd.DataFrame(data_out, columns=['index', 'time'] + list(np.arange(data_out.shape[1] - 2)))
+
+    return data_df
 
 
 def readucr(filename):
@@ -56,6 +70,67 @@ def create_path(root_dir, classifier_name, archive_name):
         os.makedirs(output_directory)
         return output_directory
 
+
+def create_agg_tsfresh(x_train, y_train, x_val, y_val, input_path):
+    print(f"x_train {x_train.shape}")
+    y_train = pd.DataFrame(y_train).idxmax(axis=1)
+    y_val = pd.DataFrame(y_val).idxmax(axis=1)
+    if os.path.exists(input_path + 'agg_train.csv'):
+        x_train_filtered = pd.read_csv(input_path + 'agg_train.csv', index_col=0)
+        x_val_filtered = pd.read_csv(input_path + 'agg_val.csv', index_col=0)
+        print(x_train_filtered.shape)
+
+        x_train_filtered = x_train_filtered.dropna(axis='columns')
+        print(x_train_filtered.shape)
+    else:
+        x_train_df = df_from_3d_np(x_train)
+        x_val_df = df_from_3d_np(x_val)
+
+        x_train_extracted = extract_features(
+            x_train_df,
+            column_id='index', column_sort='time', default_fc_parameters=EfficientFCParameters(), n_jobs=0)
+        #
+        # x_train_filtered = select_features(x_train_extracted.dropna(axis=1, how='any'), pd.DataFrame(y_train).idxmax(axis=1),
+        #                                    ml_task='classification', multiclass=True,
+        #                                    n_significant=int(len(np.unique(y_train)) / 2), n_jobs=0)
+
+        # print(f"x_train filtered {x_train_filtered.shape}")
+        # x_train_filtered = x_train_filtered.iloc[:, :50]
+
+        x_train_filtered = x_train_extracted
+
+        x_train_filtered.to_csv(input_path + 'agg_train.csv')
+        y_train.to_csv(input_path + 'y_train.csv')
+
+        x_val_tsfresh = extract_features(
+            x_val_df,
+            column_id='index', column_sort='time', default_fc_parameters=EfficientFCParameters(), n_jobs=0)
+
+        x_val_filtered = x_val_tsfresh[list(x_train_filtered.columns)]
+        x_val_filtered.to_csv(input_path + 'agg_val.csv')
+        y_val.to_csv(input_path + 'y_test.csv')
+
+    return x_train_filtered, y_train, x_val_filtered, y_val
+
+
+def feature_selection(x_train, y_train, x_test, y_test, input_path):
+
+    if not os.path.exists(input_path + 'agg_train_filtered.csv'):
+
+        # filter features with zero std
+
+        x_train = x_train.loc[:, x_train.std() != 0]
+        correlation_dict, remove_history = fcbf(x_train, y_train, threshold=0, base=np.e, is_debug=False)
+        # x_train.iloc[:, idx], x_test.iloc[:, idx]
+        x_train_filtered = x_train.loc[:, pd.DataFrame(correlation_dict)[0]]
+        x_train_filtered.to_csv(input_path + 'agg_train_filtered.csv')
+        x_val_filtered = x_test[list(x_train_filtered.columns)]
+        x_val_filtered.to_csv(input_path + 'agg_val_filtered.csv')
+    else:
+        x_train_filtered = pd.read_csv(input_path + 'agg_train_filtered.csv', index_col=0)
+        x_val_filtered = pd.read_csv(input_path + 'agg_val_filtered.csv', index_col=0)
+
+    return x_train_filtered, x_val_filtered
 
 def read_dataset(root_dir, archive_name, dataset_name):
     datasets_dict = {}
@@ -219,8 +294,8 @@ def transform_to_same_length(x, n_var, max_length):
 
 
 def transform_mts_to_ucr_format():
-    mts_root_dir = '/mnt/Other/mtsdata/'
-    mts_out_dir = '/mnt/nfs/casimir/archives/mts_archive/'
+    mts_root_dir = 'archives/mtsdata/'
+    mts_out_dir = 'archives/mts_archive/'
     for dataset_name in MTS_DATASET_NAMES:
         # print('dataset_name',dataset_name)
 
@@ -263,7 +338,7 @@ def transform_mts_to_ucr_format():
 
         x_train = transform_to_same_length(x_train, n_var, max_length)
         x_test = transform_to_same_length(x_test, n_var, max_length)
-
+        os.mkdir(out_dir)
         # save them
         np.save(out_dir + 'x_train.npy', x_train)
         np.save(out_dir + 'y_train.npy', y_train)
@@ -324,6 +399,9 @@ def generate_results_csv(output_file_name, root_dir):
             ['classifier_name', 'archive_name', 'dataset_name'])['accuracy'].mean()
     }).reset_index()
 
+    res_agg = res.groupby(['classifier_name', 'archive_name', 'dataset_name'])['accuracy'].agg(['mean', 'std', 'max'])
+    res_agg['res'] = (res_agg['mean'] * 100).round(1).astype(str) + '(' + (res_agg['std'] * 100).round(1).astype(str) + ')'
+    res_agg.reset_index().to_csv(root_dir + 'results_agg.csv', index=False)
     return res
 
 
