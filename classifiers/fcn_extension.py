@@ -12,8 +12,9 @@ from utils.utils import calculate_metrics
 
 class Classifier_CNN_TSFRESH:
 
-	def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, input_agg=None):
+	def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, input_agg=None, dense=None):
 		self.output_directory = output_directory
+		self.dense = dense
 
 		if build == True:
 			self.model = self.build_model(input_shape, nb_classes, input_agg=input_agg)
@@ -24,6 +25,10 @@ class Classifier_CNN_TSFRESH:
 		return
 
 	def build_model(self, input_raw, nb_classes, input_agg):
+
+		if self.dense == 'class':
+			self.dense = 2 * nb_classes
+
 		input_layer_raw = keras.layers.Input(input_raw)
 		input_layer_agg = keras.layers.Input(shape=input_agg)
 
@@ -43,6 +48,9 @@ class Classifier_CNN_TSFRESH:
 
 		z = keras.layers.Concatenate()([gap_layer, input_layer_agg])
 
+		if self.dense is not None:
+			z = keras.layers.Dense(self.dense, activation='relu')(z)
+
 		output_layer = keras.layers.Dense(nb_classes, activation='softmax')(z)
 
 		model = keras.models.Model(inputs=[input_layer_raw, input_layer_agg], outputs=output_layer)
@@ -53,26 +61,26 @@ class Classifier_CNN_TSFRESH:
 		reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50,
 			min_lr=0.0001)
 
-		e_s = keras.callbacks.EarlyStopping(monitor='loss', patience=60)
-
 		file_path = self.output_directory+'best_model.hdf5'
 
-		model_checkpoint = keras.callbacks.ModelCheckpoint(filepath=file_path, monitor='loss', 
+		model_checkpoint = keras.callbacks.ModelCheckpoint(filepath=file_path, monitor='loss',
 			save_best_only=True)
 
-		self.callbacks = [reduce_lr, model_checkpoint, e_s]
+		self.callbacks = [reduce_lr, model_checkpoint]
 
 		return model
 
 
 	def fit(self, x_train, y_train, x_val, y_val, y_true, x_train_agg, x_val_agg):
 
-		if not tf.test.is_gpu_available:
+		if not tf.test.is_gpu_available():
 			print('error')
-			exit()
+
+		else:
+			print('running on GPU')
 		# x_val and y_val are only used to monitor the test loss and NOT for training  
 		batch_size = 16
-		nb_epochs = 300
+		nb_epochs = 1500
 
 		mini_batch_size = int(min(x_train.shape[0]/10, batch_size))
 
@@ -82,7 +90,7 @@ class Classifier_CNN_TSFRESH:
 			verbose=self.verbose, validation_data=([x_val, x_val_agg], y_val), callbacks=self.callbacks)
 		
 		duration = time.time() - start_time
-
+		# print(f"finished fit {duration}")
 		self.model.save(self.output_directory+'last_model.hdf5')
 
 		model = keras.models.load_model(self.output_directory+'best_model.hdf5')

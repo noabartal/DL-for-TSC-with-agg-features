@@ -45,16 +45,15 @@ class Classifier_FCN:
 		model.compile(loss='categorical_crossentropy', optimizer = keras.optimizers.Adam(), 
 			metrics=['accuracy'])
 
-		reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50, 
+		reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50,
 			min_lr=0.0001)
-		e_s = keras.callbacks.EarlyStopping(monitor='loss', patience=60)
 
 		file_path = self.output_directory+'best_model.hdf5'
 
 		model_checkpoint = keras.callbacks.ModelCheckpoint(filepath=file_path, monitor='loss', 
 			save_best_only=True)
 
-		self.callbacks = [reduce_lr,model_checkpoint, e_s]
+		self.callbacks = [reduce_lr,model_checkpoint]
 
 		return model 
 
@@ -62,9 +61,9 @@ class Classifier_FCN:
 		if not tf.test.is_gpu_available:
 			print('error')
 			exit()
-		# x_val and y_val are only used to monitor the test loss and NOT for training  
+		# x_val and y_val are only used to monitor the test loss and NOT for training
 		batch_size = 16
-		nb_epochs = 300
+		nb_epochs = 1500
 
 		mini_batch_size = int(min(x_train.shape[0]/10, batch_size))
 

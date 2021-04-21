@@ -16,13 +16,13 @@ from utils.utils import save_logs
 from utils.utils import calculate_metrics
 
 
-class Classifier_RESNET:
+class Classifier_RESNET_TSFRESH:
 
-    def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, load_weights=False):
+    def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, load_weights=False, input_agg=None):
         self.output_directory = output_directory
         if build == True:
-            self.model = self.build_model(input_shape, nb_classes)
-            if (verbose == True):
+            self.model = self.build_model(input_shape, nb_classes, input_agg=input_agg)
+            if verbose > 0 :
                 self.model.summary()
             self.verbose = verbose
             if load_weights == True:
@@ -34,14 +34,14 @@ class Classifier_RESNET:
                 self.model.save_weights(self.output_directory + 'model_init.hdf5')
         return
 
-    def build_model(self, input_shape, nb_classes):
+    def build_model(self, input_raw, nb_classes, input_agg):
         n_feature_maps = 64
 
-        input_layer = keras.layers.Input(input_shape)
-
+        input_layer_raw = keras.layers.Input(input_raw)
+        input_layer_agg = keras.layers.Input(shape=input_agg)
         # BLOCK 1
 
-        conv_x = keras.layers.Conv1D(filters=n_feature_maps, kernel_size=8, padding='same')(input_layer)
+        conv_x = keras.layers.Conv1D(filters=n_feature_maps, kernel_size=8, padding='same')(input_layer_raw)
         conv_x = keras.layers.BatchNormalization()(conv_x)
         conv_x = keras.layers.Activation('relu')(conv_x)
 
@@ -53,7 +53,7 @@ class Classifier_RESNET:
         conv_z = keras.layers.BatchNormalization()(conv_z)
 
         # expand channels for the sum
-        shortcut_y = keras.layers.Conv1D(filters=n_feature_maps, kernel_size=1, padding='same')(input_layer)
+        shortcut_y = keras.layers.Conv1D(filters=n_feature_maps, kernel_size=1, padding='same')(input_layer_raw)
         shortcut_y = keras.layers.BatchNormalization()(shortcut_y)
 
         output_block_1 = keras.layers.add([shortcut_y, conv_z])
@@ -102,15 +102,21 @@ class Classifier_RESNET:
 
         gap_layer = keras.layers.GlobalAveragePooling1D()(output_block_3)
 
-        output_layer = keras.layers.Dense(nb_classes, activation='softmax')(gap_layer)
+        z = keras.layers.Concatenate()([gap_layer, input_layer_agg])
 
-        model = keras.models.Model(inputs=input_layer, outputs=output_layer)
+        # z = keras.layers.Dense(32, activation='relu')(z)
+
+        output_layer = keras.layers.Dense(nb_classes, activation='softmax')(z)
+
+        model = keras.models.Model(inputs=[input_layer_raw, input_layer_agg], outputs=output_layer)
 
         model.compile(loss='categorical_crossentropy', optimizer=keras.optimizers.Adam(),
                       metrics=['accuracy'])
 
         reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50,
                                                       min_lr=0.0001)
+
+        # e_s = keras.callbacks.EarlyStopping(monitor='loss', patience=100)
 
         file_path = self.output_directory + 'best_model.hdf5'
 
@@ -121,7 +127,7 @@ class Classifier_RESNET:
 
         return model
 
-    def fit(self, x_train, y_train, x_val, y_val, y_true):
+    def fit(self, x_train, y_train, x_val, y_val, y_true, x_train_agg, x_val_agg):
         if not tf.test.is_gpu_available:
             print('error')
             exit()
@@ -133,14 +139,14 @@ class Classifier_RESNET:
 
         start_time = time.time()
 
-        hist = self.model.fit(x_train, y_train, batch_size=mini_batch_size, epochs=nb_epochs,
-                              verbose=self.verbose, validation_data=(x_val, y_val), callbacks=self.callbacks)
+        hist = self.model.fit([x_train, x_train_agg], y_train, batch_size=mini_batch_size, epochs=nb_epochs,
+                              verbose=self.verbose, validation_data=([x_val, x_val_agg], y_val), callbacks=self.callbacks)
 
         duration = time.time() - start_time
 
         self.model.save(self.output_directory + 'last_model.hdf5')
 
-        y_pred = self.predict(x_val, y_true, x_train, y_train, y_val,
+        y_pred = self.predict([x_val, x_val_agg], y_true, x_train, y_train, y_val,
                               return_df_metrics=False)
 
         # save predictions

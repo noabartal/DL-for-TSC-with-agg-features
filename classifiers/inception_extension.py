@@ -2,16 +2,33 @@ import tensorflow.keras as keras
 import tensorflow as tf
 import numpy as np
 import time
-
+import re
 from utils.utils import save_logs
 from utils.utils import calculate_metrics
 from utils.utils import save_test_duration
+import random
+import os
+# Seed value
+# seed_value = 42
+# # os.environ['TF_DETERMINISTIC_OPS'] = '1'
+# # 1. Set the `PYTHONHASHSEED` environment variable at a fixed value
+# os.environ['PYTHONHASHSEED'] = str(seed_value)
+#
+# # 2. Set the `python` built-in pseudo-random generator at a fixed value
+# random.seed(seed_value)
+#
+# # 3. Set the `numpy` pseudo-random generator at a fixed value
+# np.random.seed(seed_value)
+#
+# # # 4. Set the `tensorflow` pseudo-random generator at a fixed value
+# tf.random.set_seed(seed_value)
+# #
 
-
-class Classifier_INCEPTION:
+class Classifier_INCEPTION_TSFRESH:
 
     def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, batch_size=64, lr=0.001,
-                 nb_filters=32, use_residual=True, use_bottleneck=True, depth=6, kernel_size=41, nb_epochs=1500):
+                 nb_filters=32, use_residual=True, use_bottleneck=True, depth=6, kernel_size=41, nb_epochs=1500,
+                 input_agg=None, early_stop=False, dense=None):
 
         self.output_directory = output_directory
 
@@ -26,12 +43,19 @@ class Classifier_INCEPTION:
         self.nb_epochs = nb_epochs
         self.lr = lr
         self.verbose = verbose
-
+        self.early_stop = early_stop
+        self.dense = dense
         if build == True:
-            self.model = self.build_model(input_shape, nb_classes)
+            self.model = self.build_model(input_shape, nb_classes, input_agg=input_agg)
             if (verbose > 0):
                 self.model.summary()
             self.model.save_weights(self.output_directory + 'model_init.hdf5')
+            # self.model.load_weights(f'{re.sub(r"_f_[0-9a-zA-Z_]+","",self.output_directory.replace("my_model_", ""))}model_init.hdf5', by_name=True)
+
+    # model = keras.models.load_model(
+    #     'D:\\Thesis\\dl-4-tsc\\results\\my_model_inception\\UCRArchive_2018_f_1norm_ecfs\\Adiac\\best_model.hdf5')
+    # model.get_weights()
+    # model.layers[i].set_weights(weights)
 
     def _inception_module(self, input_tensor, stride=1, activation='linear'):
 
@@ -72,11 +96,15 @@ class Classifier_INCEPTION:
         x = keras.layers.Activation('relu')(x)
         return x
 
-    def build_model(self, input_shape, nb_classes):
-        input_layer = keras.layers.Input(input_shape)
+    def build_model(self, input_raw, nb_classes, input_agg):
 
-        x = input_layer
-        input_res = input_layer
+        if self.dense == 'class':
+            self.dense = 2 * nb_classes
+        input_layer_raw = keras.layers.Input(input_raw)
+        input_layer_agg = keras.layers.Input(shape=input_agg)
+
+        x = input_layer_raw
+        input_res = input_layer_raw
 
         for d in range(self.depth):
 
@@ -88,15 +116,21 @@ class Classifier_INCEPTION:
 
         gap_layer = keras.layers.GlobalAveragePooling1D()(x)
 
-        output_layer = keras.layers.Dense(nb_classes, activation='softmax')(gap_layer)
+        z = keras.layers.Concatenate(name="concat_layer")([gap_layer, input_layer_agg])
 
-        model = keras.models.Model(inputs=input_layer, outputs=output_layer)
+        if self.dense is not None:
+            z = keras.layers.Dense(self.dense, activation='relu')(z)
+
+        output_layer = keras.layers.Dense(nb_classes, activation='softmax', name="softmax_dense_mine")(z)
+
+        model = keras.models.Model(inputs=[input_layer_raw, input_layer_agg], outputs=output_layer)
 
         model.compile(loss='categorical_crossentropy', optimizer=keras.optimizers.Adam(self.lr),
                       metrics=['accuracy'])
 
         reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='loss', factor=0.5, patience=50,
                                                       min_lr=0.0001)
+        e_s = keras.callbacks.EarlyStopping(monitor='loss', patience=100)
 
         file_path = self.output_directory + 'best_model.hdf5'
 
@@ -104,13 +138,14 @@ class Classifier_INCEPTION:
                                                            save_best_only=True)
 
         self.callbacks = [reduce_lr, model_checkpoint]
-
+        if self.early_stop:
+            self.callbacks += [e_s]
         return model
 
-    def fit(self, x_train, y_train, x_val, y_val, y_true):
+    def fit(self, x_train, y_train, x_val, y_val, y_true, x_train_agg, x_val_agg):
+
         if not tf.test.is_gpu_available:
             print('error no gpu')
-            exit()
         # x_val and y_val are only used to monitor the test loss and NOT for training
 
         if self.batch_size is None:
@@ -120,15 +155,14 @@ class Classifier_INCEPTION:
 
         start_time = time.time()
 
-        hist = self.model.fit(x_train, y_train, batch_size=mini_batch_size, epochs=self.nb_epochs,
-                              verbose=self.verbose, validation_data=(x_val, y_val), callbacks=self.callbacks)
+        hist = self.model.fit([x_train, x_train_agg], y_train, batch_size=mini_batch_size, epochs=self.nb_epochs,
+                              verbose=self.verbose, validation_data=([x_val, x_val_agg], y_val), callbacks=self.callbacks)
 
         duration = time.time() - start_time
-        # print(f"finished fit {duration}")
 
         self.model.save(self.output_directory + 'last_model.hdf5')
 
-        y_pred = self.predict(x_val, y_true, x_train, y_train, y_val,
+        y_pred = self.predict([x_val, x_val_agg], y_true, x_train, y_train, y_val,
                               return_df_metrics=False)
 
         # save predictions
@@ -146,6 +180,7 @@ class Classifier_INCEPTION:
     def predict(self, x_test, y_true, x_train, y_train, y_test, return_df_metrics=True):
         start_time = time.time()
         model_path = self.output_directory + 'best_model.hdf5'
+
         model = keras.models.load_model(model_path)
         y_pred = model.predict(x_test, batch_size=self.batch_size)
         if return_df_metrics:
