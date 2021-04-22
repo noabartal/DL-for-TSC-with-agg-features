@@ -18,8 +18,11 @@ from utils.utils import calculate_metrics
 
 class Classifier_RESNET_TSFRESH:
 
-    def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, load_weights=False, input_agg=None):
+    def __init__(self, output_directory, input_shape, nb_classes, verbose=False, build=True, load_weights=False,
+                 input_agg=None, dense=None):
         self.output_directory = output_directory
+        self.dense = dense
+
         if build == True:
             self.model = self.build_model(input_shape, nb_classes, input_agg=input_agg)
             if verbose > 0 :
@@ -35,6 +38,9 @@ class Classifier_RESNET_TSFRESH:
         return
 
     def build_model(self, input_raw, nb_classes, input_agg):
+        if self.dense == 'class':
+            self.dense = 2 * nb_classes
+
         n_feature_maps = 64
 
         input_layer_raw = keras.layers.Input(input_raw)
@@ -104,7 +110,8 @@ class Classifier_RESNET_TSFRESH:
 
         z = keras.layers.Concatenate()([gap_layer, input_layer_agg])
 
-        # z = keras.layers.Dense(32, activation='relu')(z)
+        if self.dense is not None:
+            z = keras.layers.Dense(self.dense, activation='relu')(z)
 
         output_layer = keras.layers.Dense(nb_classes, activation='softmax')(z)
 

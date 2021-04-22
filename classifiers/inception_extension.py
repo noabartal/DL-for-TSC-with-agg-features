@@ -6,23 +6,6 @@ import re
 from utils.utils import save_logs
 from utils.utils import calculate_metrics
 from utils.utils import save_test_duration
-import random
-import os
-# Seed value
-# seed_value = 42
-# # os.environ['TF_DETERMINISTIC_OPS'] = '1'
-# # 1. Set the `PYTHONHASHSEED` environment variable at a fixed value
-# os.environ['PYTHONHASHSEED'] = str(seed_value)
-#
-# # 2. Set the `python` built-in pseudo-random generator at a fixed value
-# random.seed(seed_value)
-#
-# # 3. Set the `numpy` pseudo-random generator at a fixed value
-# np.random.seed(seed_value)
-#
-# # # 4. Set the `tensorflow` pseudo-random generator at a fixed value
-# tf.random.set_seed(seed_value)
-# #
 
 class Classifier_INCEPTION_TSFRESH:
 
