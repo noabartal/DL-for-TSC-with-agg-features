@@ -14,7 +14,7 @@ UNIVARIATE_DATASET_NAMES = ['50words', 'Adiac', 'ArrowHead', 'Beef', 'BeetleFly'
                             'SonyAIBORobotSurfaceII', 'StarLightCurves', 'Strawberry', 'SwedishLeaf', 'Symbols',
                             'synthetic_control', 'ToeSegmentation1', 'ToeSegmentation2', 'Trace', 'TwoLeadECG',
                             'Two_Patterns', 'UWaveGestureLibraryAll', 'uWaveGestureLibrary_X', 'uWaveGestureLibrary_Y',
-                            'uWaveGestureLibrary_Z', 'wafer', 'Wine', 'WordsSynonyms', 'Worms', 'WormsTwoClass', 'yoga']
+                            'uWaveGestureLibrary_Z', 'wafer', 'Wine', 'WordsSynonyms', 'Worms', 'WormsTwoClass', 'yoga'] # UCR_2015
 
 UNIVARIATE_DATASET_NAMES_2018 = ['ACSF1', 'Adiac', 'AllGestureWiimoteX', 'AllGestureWiimoteY', 'AllGestureWiimoteZ',
                                  'ArrowHead', 'Beef', 'BeetleFly', 'BirdChicken', 'BME', 'Car', 'CBF', 'Chinatown',
@@ -46,21 +46,63 @@ UNIVARIATE_DATASET_NAMES_2018 = ['ACSF1', 'Adiac', 'AllGestureWiimoteX', 'AllGes
                                  'Symbols', 'SyntheticControl', 'ToeSegmentation1', 'ToeSegmentation2', 'Trace',
                                  'TwoLeadECG', 'TwoPatterns', 'UMD', 'UWaveGestureLibraryAll',
                                  'UWaveGestureLibraryX', 'UWaveGestureLibraryY', 'UWaveGestureLibraryZ',
+                                 'Wafer', 'Wine', 'WordSynonyms', 'Worms', 'WormsTwoClass', 'Yoga'] # full ucr 2018
+
+UNIVARIATE_DATASET_NAMES_2018 = ['ACSF1', 'Adiac',
+                                 'ArrowHead', 'Beef', 'BeetleFly', 'BirdChicken', 'BME', 'Car', 'CBF', 'Chinatown',
+                                 'ChlorineConcentration', 'CinCECGTorso', 'Coffee', 'Computers', 'CricketX',
+                                 'CricketY', 'CricketZ', 'Crop', 'DiatomSizeReduction',
+                                 'DistalPhalanxOutlineAgeGroup', 'DistalPhalanxOutlineCorrect', 'DistalPhalanxTW',
+                                 'DodgerLoopDay', 'DodgerLoopGame', 'DodgerLoopWeekend', 'Earthquakes', 'ECG200',
+                                 'ECG5000', 'ECGFiveDays', 'ElectricDevices', 'EOGHorizontalSignal',
+                                 'EOGVerticalSignal', 'EthanolLevel', 'FaceAll', 'FaceFour', 'FacesUCR',
+                                 'FiftyWords', 'Fish', 'FordA', 'FordB', 'FreezerRegularTrain',
+                                 'FreezerSmallTrain', 'Fungi', 'GunPoint',
+                                 'GunPointAgeSpan', 'GunPointMaleVersusFemale', 'GunPointOldVersusYoung',
+                                 'Ham', 'HandOutlines', 'Haptics', 'Herring', 'HouseTwenty', 'InlineSkate',
+                                 'InsectEPGRegularTrain', 'InsectEPGSmallTrain', 'InsectWingbeatSound',
+                                 'ItalyPowerDemand', 'LargeKitchenAppliances', 'Lightning2', 'Lightning7',
+                                 'Mallat', 'Meat', 'MedicalImages',
+                                 'MiddlePhalanxOutlineAgeGroup', 'MiddlePhalanxOutlineCorrect',
+                                 'MiddlePhalanxTW', 'MixedShapesRegularTrain', 'MixedShapesSmallTrain',
+                                 'MoteStrain', 'NonInvasiveFetalECGThorax1', 'NonInvasiveFetalECGThorax2',
+                                 'OliveOil', 'OSULeaf', 'PhalangesOutlinesCorrect', 'Phoneme',
+                                 'PigAirwayPressure', 'PigArtPressure', 'PigCVP',
+                                 'Plane', 'PowerCons', 'ProximalPhalanxOutlineAgeGroup',
+                                 'ProximalPhalanxOutlineCorrect', 'ProximalPhalanxTW', 'RefrigerationDevices',
+                                 'Rock', 'ScreenType', 'SemgHandGenderCh2', 'SemgHandMovementCh2',
+                                 'SemgHandSubjectCh2', 'ShapeletSim', 'ShapesAll',
+                                 'SmallKitchenAppliances', 'SmoothSubspace', 'SonyAIBORobotSurface1',
+                                 'SonyAIBORobotSurface2', 'StarLightCurves', 'Strawberry', 'SwedishLeaf',
+                                 'Symbols', 'SyntheticControl', 'ToeSegmentation1', 'ToeSegmentation2', 'Trace',
+                                 'TwoLeadECG', 'TwoPatterns', 'UMD', 'UWaveGestureLibraryAll',
+                                 'UWaveGestureLibraryX', 'UWaveGestureLibraryY', 'UWaveGestureLibraryZ',
                                  'Wafer', 'Wine', 'WordSynonyms', 'Worms', 'WormsTwoClass', 'Yoga']
+
+
+
 
 MTS_DATASET_NAMES = ['ArabicDigits', 'AUSLAN', 'CharacterTrajectories', 'CMUsubject16', 'ECG',
                      'JapaneseVowels', 'KickvsPunch', 'Libras', 'NetFlow', 'UWave', 'Wafer', 'WalkvsRun']
 
-MTS_DATASET_NAMES = ['AUSLAN', 'CharacterTrajectories',
-                     'JapaneseVowels', 'NetFlow', 'Wafer']
 ITERATIONS = 5  # nb of random runs for random initializations
+# ARCHIVE_NAMES = ['mts_archive']
 
-ARCHIVE_NAMES = ['mts_archive']
+ARCHIVE_NAMES = ['UCRArchive_2018']
 
-dataset_names_for_archive = {'UCRArchive_2018': UNIVARIATE_DATASET_NAMES_2018}
+dataset_names_for_archive = {'UCRArchive_2018': UNIVARIATE_DATASET_NAMES_2018, 'mts_archive': MTS_DATASET_NAMES}
 
-CLASSIFIERS = ['fcn', 'mlp', 'resnet', 'tlenet', 'mcnn', 'twiesn', 'encoder', 'mcdcnn', 'cnn', 'inception']
-CLASSIFIERS = ['my_model']
+CLASSIFIERS = ['fcn', 'inception', 'resnet', 'my_model_inception', 'my_model_fcn', 'my_model_resnet']
+NORMALIZE = True
+
+#precentage of the features
+FEATURES = [0, 1, 2, 3, 0.1, 0.2]
+FEATURES = [2]
+
+# SELECTION = ['ufs', 'cfs', 'xgboost', 'ecfs', 'weka']
+SELECTION = ['ecfs']
+DENSE = [None, 32, 64, 'class']
+
 dataset_types = {'ElectricDevices': 'DEVICE', 'FordB': 'SENSOR',
                  'FordA': 'SENSOR', 'NonInvasiveFatalECG_Thorax2': 'ECG',
                  'NonInvasiveFatalECG_Thorax1': 'ECG', 'PhalangesOutlinesCorrect': 'IMAGE',
