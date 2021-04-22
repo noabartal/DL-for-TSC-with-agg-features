@@ -2,22 +2,27 @@ from builtins import print
 import numpy as np
 import pandas as pd
 import matplotlib
+from sklearn.feature_selection import SelectKBest, chi2, f_classif
+from scipy import stats
+from utils.constants import NORMALIZE
+from xgboost import XGBClassifier
+import time
 
+import seaborn as sns
 # matplotlib.use('agg')
 import matplotlib.pyplot as plt
-
+import utils.constants
 matplotlib.rcParams['font.family'] = 'sans-serif'
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
 import os
 import operator
 from CFSmethod.CFS import fcbf
-
-import utils
+from ec_feature_selection import ECFS
 
 from utils.constants import UNIVARIATE_DATASET_NAMES as DATASET_NAMES
 from utils.constants import UNIVARIATE_DATASET_NAMES_2018 as DATASET_NAMES_2018
-from utils.constants import ARCHIVE_NAMES  as ARCHIVE_NAMES
-from utils.constants import CLASSIFIERS
+from utils.constants import ARCHIVE_NAMES as ARCHIVE_NAMES
+from utils.constants import CLASSIFIERS, FEATURES, SELECTION
 from utils.constants import ITERATIONS
 from utils.constants import MTS_DATASET_NAMES
 
@@ -25,13 +30,13 @@ from sklearn.metrics import accuracy_score
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.preprocessing import LabelEncoder
-from sklearn.feature_selection import SelectKBest, chi2
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from scipy.interpolate import interp1d
 from scipy.io import loadmat
 from tsfresh import select_features, extract_features, extract_relevant_features
 from tsfresh.feature_extraction import MinimalFCParameters, EfficientFCParameters, ComprehensiveFCParameters
 from matplotlib import pyplot
+
 
 def df_from_3d_np(data):
     data_out = np.column_stack((np.repeat(np.arange(data.shape[0]), data.shape[1]),
@@ -63,7 +68,7 @@ def create_directory(directory_path):
 
 
 def create_path(root_dir, classifier_name, archive_name):
-    output_directory = root_dir + '/results/' + classifier_name + '/' + archive_name + '/'
+    output_directory = root_dir + 'results/' + classifier_name + '/' + archive_name + '/'
     if os.path.exists(output_directory):
         return None
     else:
@@ -71,73 +76,215 @@ def create_path(root_dir, classifier_name, archive_name):
         return output_directory
 
 
-def create_agg_tsfresh(x_train, y_train, x_val, y_val, input_path):
-    print(f"x_train {x_train.shape}")
+def create_agg_tsfresh(x_train, y_train, x_val, y_val, input_path, size=None):
+
     y_train = pd.DataFrame(y_train).idxmax(axis=1)
     y_val = pd.DataFrame(y_val).idxmax(axis=1)
-    if os.path.exists(input_path + 'agg_train.csv'):
+    if os.path.exists(input_path + 'agg_train.csv') and os.path.exists(input_path + 'agg_val.csv') and size is None:
+
         x_train_filtered = pd.read_csv(input_path + 'agg_train.csv', index_col=0)
         x_val_filtered = pd.read_csv(input_path + 'agg_val.csv', index_col=0)
-        print(x_train_filtered.shape)
 
-        x_train_filtered = x_train_filtered.dropna(axis='columns')
-        print(x_train_filtered.shape)
+        x_train_filtered = x_train_filtered.loc[:, x_train_filtered.var() != 0]
+        x_val_filtered = x_val_filtered[x_train_filtered.columns]
+
     else:
         x_train_df = df_from_3d_np(x_train)
         x_val_df = df_from_3d_np(x_val)
 
+        x_train_df = x_train_df.fillna(0)
+        x_val_df = x_val_df.fillna(0)
+        # start_time = time.time()
         x_train_extracted = extract_features(
             x_train_df,
-            column_id='index', column_sort='time', default_fc_parameters=EfficientFCParameters(), n_jobs=0)
-        #
-        # x_train_filtered = select_features(x_train_extracted.dropna(axis=1, how='any'), pd.DataFrame(y_train).idxmax(axis=1),
-        #                                    ml_task='classification', multiclass=True,
-        #                                    n_significant=int(len(np.unique(y_train)) / 2), n_jobs=0)
+            column_id='index', column_sort='time', default_fc_parameters=EfficientFCParameters())
+        # duration = time.time() - start_time
+        # print(f'feature extraction {duration}')
+        if 'mts_archive' in input_path:
+            x_train_sel = select_features(x_train_extracted, y_train, n_jobs=0)
 
-        # print(f"x_train filtered {x_train_filtered.shape}")
-        # x_train_filtered = x_train_filtered.iloc[:, :50]
+            # if not enough features, take larger set
+            if x_train_sel.shape[1] < 300:
+                X_best = SelectKBest(f_classif, k='all').fit(x_train_extracted, y_train)
+                ufs_scores = pd.DataFrame(X_best.scores_, index=x_train_extracted.columns, columns=['score']).sort_values(
+                    by=['score'], ascending=False)
+                x_train_sel = x_train_extracted[ufs_scores.iloc[:300].index]
 
-        x_train_filtered = x_train_extracted
+            x_train_extracted = x_train_sel
 
-        x_train_filtered.to_csv(input_path + 'agg_train.csv')
-        y_train.to_csv(input_path + 'y_train.csv')
+        x_train_extracted = x_train_extracted.dropna(axis='columns')
 
-        x_val_tsfresh = extract_features(
-            x_val_df,
-            column_id='index', column_sort='time', default_fc_parameters=EfficientFCParameters(), n_jobs=0)
+        x_train_extracted.to_csv(input_path + f'agg_train.csv')
+        y_train.to_csv(input_path + f'y_train.csv')
 
-        x_val_filtered = x_val_tsfresh[list(x_train_filtered.columns)]
-        x_val_filtered.to_csv(input_path + 'agg_val.csv')
+        x_val_filtered = pd.read_csv(input_path + 'agg_val.csv', index_col=0)
+
+        x_train_filtered = x_train_extracted.loc[:, x_train_extracted.var() != 0]
+        x_val_filtered = x_val_filtered[x_train_filtered.columns]
+
         y_val.to_csv(input_path + 'y_test.csv')
 
     return x_train_filtered, y_train, x_val_filtered, y_val
 
 
-def feature_selection(x_train, y_train, x_test, y_test, input_path):
-
-    if not os.path.exists(input_path + 'agg_train_filtered.csv'):
-
-        # filter features with zero std
-
-        x_train = x_train.loc[:, x_train.std() != 0]
-        correlation_dict, remove_history = fcbf(x_train, y_train, threshold=0, base=np.e, is_debug=False)
-        # x_train.iloc[:, idx], x_test.iloc[:, idx]
-        x_train_filtered = x_train.loc[:, pd.DataFrame(correlation_dict)[0]]
-        x_train_filtered.to_csv(input_path + 'agg_train_filtered.csv')
-        x_val_filtered = x_test[list(x_train_filtered.columns)]
-        x_val_filtered.to_csv(input_path + 'agg_val_filtered.csv')
+def feature_selection(x_train, y_train, x_test, input_path, features, method):
+    """
+    select features from the aggregated features set
+    :param x_train:
+    :param y_train:
+    :param x_test:
+    :param input_path:
+    :param features:
+    :param method: weka or cfs (two different implementations of correlation feature selection)  / ufs (ANOVA based) / ecfs
+    :return:
+    """
+    if method == 'cfs':
+        x_train_filtered, x_val_filtered = feature_selection_cfs(x_train, y_train, x_test, input_path, features)
+    elif method == 'weka':
+        x_train_filtered, x_val_filtered = feature_selection_weka(x_train, y_train, x_test, input_path, features)
+    elif method == 'ufs':
+        x_train_filtered, x_val_filtered = feature_selection_ufs(x_train, y_train, x_test, input_path, features)
+    # elif method == 'xgboost':
+    #     x_train_filtered, x_val_filtered = feature_selection_xgboost(x_train, y_train, x_test, input_path, features)
+    elif method == 'ecfs':
+        x_train_filtered, x_val_filtered = feature_selection_ecfs(x_train, y_train, x_test, input_path, features)
     else:
-        x_train_filtered = pd.read_csv(input_path + 'agg_train_filtered.csv', index_col=0)
-        x_val_filtered = pd.read_csv(input_path + 'agg_val_filtered.csv', index_col=0)
+        print('method not exist')
+        return x_train, x_test
+    if NORMALIZE:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+
+        x_train_filtered.loc[:, x_train_filtered.columns] = scaler.fit_transform(x_train_filtered.values)
+        x_val_filtered.loc[:, x_val_filtered.columns] = scaler.transform(x_val_filtered.values)
+
+    print(f'after feature selection {x_train_filtered.shape}')
 
     return x_train_filtered, x_val_filtered
+
+
+def feature_selection_ufs(x_train, y_train, x_test, input_path, features):
+    percent = int(x_train.shape[1] * (features / 100.0))
+    if not os.path.exists(input_path + f'ufs_scoresa.csv'):
+        x_train = x_train.loc[:, (x_train != x_train.iloc[0]).any()]
+        X_best = SelectKBest(f_classif, k=percent).fit(x_train, y_train)
+
+        ufs_scores = pd.DataFrame(X_best.scores_, index=x_train.columns, columns=['score']).sort_values(by=['score'], ascending=False)
+        ufs_scores.to_csv(input_path + "ufs_scores.csv")
+    else:
+        ufs_scores = pd.read_csv(input_path + f'ufs_scores.csv', index_col=0)
+
+    x_train_filtered = x_train[ufs_scores.iloc[:percent].index]
+    x_val_filtered = x_test[ufs_scores.iloc[:percent].index]
+
+    return x_train_filtered, x_val_filtered
+
+
+def feature_selection_ecfs(x_train, y_train, x_test, input_path, features):
+    percent = int(x_train.shape[1] * (features / 100.0))
+
+    if not os.path.exists(input_path + f'ecfs_summary.csv'):
+        ecfs = ECFS(n_features=percent)
+
+        # ufs = pd.read_csv(input_path + "ufs_scores.csv", index_col=0)
+        # x_train = x_train[ufs.iloc[:1200].index]
+        ecfs.fit(X=x_train, y=y_train, alpha=0.5, positive_class=1, negative_class=0)
+        summary = pd.DataFrame({'Feature': x_train.columns, 'Ranking': ecfs.ranking, 'MI': ecfs.mutual_information,
+                                'Fisher Score': ecfs.fisher_score})
+        summary = summary.sort_values(by='Ranking')
+        summary.to_csv(input_path + f'ecfs_summary.csv')
+
+    else:
+        summary = pd.read_csv(input_path + f'ecfs_summary.csv', index_col=0)
+    x_train_filtered = x_train.loc[:, summary.iloc[:percent]['Feature']]
+    x_val_filtered = x_test.loc[:, summary.iloc[:percent]['Feature']]
+    return x_train_filtered, x_val_filtered
+
+
+def feature_selection_xgboost(x_train, y_train, x_test, input_path, features):
+    percent = int(x_train.shape[1] * (features / 100.0))
+
+    if not os.path.exists(input_path + f'feature_importance_XGBOOST.csv'):
+
+        model = XGBClassifier()
+        model.fit(x_train, y_train)
+        feature_imp = pd.DataFrame(sorted(zip(model.feature_importances_, x_train.columns)),
+                                   columns=['Value', 'Feature']).sort_values(by="Value", ascending=False).reset_index(
+            drop=True)
+
+        feature_imp.to_csv(input_path + 'feature_importance_XGBOOST.csv')
+
+    else:
+        feature_imp = pd.read_csv(input_path + 'feature_importance_XGBOOST.csv')
+
+    x_train_filtered = x_train.loc[:, feature_imp.iloc[:percent]['Feature']]
+    x_val_filtered = x_test.loc[:, feature_imp.iloc[:percent]['Feature']]
+
+    return x_train_filtered, x_val_filtered
+
+
+def feature_selection_weka(x_train, y_train, x_test, input_path, features):
+    percent = int(x_train.shape[1] * (features / 100.0))
+    if not os.path.exists('Weka'):
+        os.mkdir('Weka')
+
+    if not os.path.exists(input_path + f'selected_features_weka_{features}.csv'):
+        x_train = x_train.loc[:, (x_train != x_train.iloc[0]).any()]
+        sava_data = x_train.copy()
+        sava_data.columns = [str(a) + "a" for a in range(sava_data.shape[1])]
+        sava_data['target'] = y_train
+        sava_data.to_csv('Weka/train_weka_format.csv', index=False)
+
+        from weka.attribute_selection import ASEvaluation, AttributeSelection,ASSearch
+        from weka.core.converters import Loader, Saver
+        loader = Loader(classname="weka.core.converters.CSVLoader")
+        data = loader.load_file('Weka/train_weka_format.csv', class_index='last')
+
+        search = ASSearch(classname="weka.attributeSelection.GreedyStepwise", options=["-C", "-R", "-N", f"{percent}"])
+        evaluator = ASEvaluation(classname="weka.attributeSelection.CfsSubsetEval",
+                                 options=["-P", "1", "-E", "1", "-L"])
+        attsel = AttributeSelection()
+        attsel.search(search)
+        attsel.evaluator(evaluator)
+        attsel.select_attributes(data)
+        ranked_attributes = pd.DataFrame(attsel.ranked_attributes, columns=['Feature', 'Rank'])
+        ranked_attributes['Feature'] = ranked_attributes['Feature'].astype(int)
+        set_of_features = ranked_attributes.loc[:percent - 1, 'Feature']
+
+        x_train.iloc[:, set_of_features].to_csv(input_path + f'selected_features_weka_{features}.csv')
+        selected_features = x_train.iloc[:, set_of_features].columns
+    else:
+        selected_features = pd.read_csv(input_path + f'selected_features_weka_{features}.csv', index_col=0).columns
+
+    x_train_filtered = x_train.loc[:, selected_features]
+    x_val_filtered = x_test.loc[:, selected_features]
+
+    return x_train_filtered, x_val_filtered
+
+
+def feature_selection_cfs(x_train, y_train, x_test, input_path, features):
+    th = 0
+    percent = int(x_train.shape[1] * (features / 100.0))
+
+    if not os.path.exists(input_path + f'correlation_dict{th}.csv'):
+
+        correlation_dict, remove_history = fcbf(x_train, y_train, threshold=th, base=2, is_debug=False)
+
+        pd.DataFrame(correlation_dict).to_csv(input_path + f'correlation_dict{th}.csv')
+
+    correlation_dict = pd.read_csv(input_path + f'correlation_dict{th}.csv', index_col=0)
+    correlation_dict = correlation_dict.iloc[:percent, :]
+    x_train_filtered = x_train.loc[:, correlation_dict['0']]
+    x_val_filtered = x_test[list(x_train_filtered.columns)]
+
+    return x_train_filtered, x_val_filtered
+
 
 def read_dataset(root_dir, archive_name, dataset_name):
     datasets_dict = {}
     cur_root_dir = root_dir.replace('-temp', '')
 
     if archive_name == 'mts_archive':
-        file_name = cur_root_dir + '/archives/' + archive_name + '/' + dataset_name + '/'
+        file_name = cur_root_dir + 'archives/' + archive_name + '/' + dataset_name + '/'
         x_train = np.load(file_name + 'x_train.npy')
         y_train = np.load(file_name + 'y_train.npy')
         x_test = np.load(file_name + 'x_test.npy')
@@ -147,7 +294,7 @@ def read_dataset(root_dir, archive_name, dataset_name):
                                        y_test.copy())
 
     elif archive_name == 'UCRArchive_2018':
-        root_dir_dataset = cur_root_dir + '/archives/' + archive_name + '/' + dataset_name + '/'
+        root_dir_dataset = cur_root_dir + 'archives/' + archive_name + '/' + dataset_name + '/'
         df_train = pd.read_csv(root_dir_dataset + '/' + dataset_name + '_TRAIN.tsv', sep='\t', header=None)
 
         df_test = pd.read_csv(root_dir_dataset + '/' + dataset_name + '_TEST.tsv', sep='\t', header=None)
@@ -176,7 +323,7 @@ def read_dataset(root_dir, archive_name, dataset_name):
         datasets_dict[dataset_name] = (x_train.copy(), y_train.copy(), x_test.copy(),
                                        y_test.copy())
     else:
-        file_name = cur_root_dir + '/archives/' + archive_name + '/' + dataset_name + '/' + dataset_name
+        file_name = cur_root_dir + 'archives/' + archive_name + '/' + dataset_name + '/' + dataset_name
         x_train, y_train = readucr(file_name + '_TRAIN')
         x_test, y_test = readucr(file_name + '_TEST')
         datasets_dict[dataset_name] = (x_train.copy(), y_train.copy(), x_test.copy(),
@@ -193,7 +340,7 @@ def read_all_datasets(root_dir, archive_name, split_val=False):
     if archive_name == 'mts_archive':
 
         for dataset_name in MTS_DATASET_NAMES:
-            root_dir_dataset = cur_root_dir + '/archives/' + archive_name + '/' + dataset_name + '/'
+            root_dir_dataset = cur_root_dir + 'archives/' + archive_name + '/' + dataset_name + '/'
 
             x_train = np.load(root_dir_dataset + 'x_train.npy')
             y_train = np.load(root_dir_dataset + 'y_train.npy')
@@ -204,11 +351,11 @@ def read_all_datasets(root_dir, archive_name, split_val=False):
                                            y_test.copy())
     elif archive_name == 'UCRArchive_2018':
         for dataset_name in DATASET_NAMES_2018:
-            root_dir_dataset = cur_root_dir + '/archives/' + archive_name + '/' + dataset_name + '/'
+            root_dir_dataset = cur_root_dir + 'archives/' + archive_name + '/' + dataset_name + '/'
 
-            df_train = pd.read_csv(root_dir_dataset + '/' + dataset_name + '_TRAIN.tsv', sep='\t', header=None)
+            df_train = pd.read_csv(root_dir_dataset + dataset_name + '_TRAIN.tsv', sep='\t', header=None)
 
-            df_test = pd.read_csv(root_dir_dataset + '/' + dataset_name + '_TEST.tsv', sep='\t', header=None)
+            df_test = pd.read_csv(root_dir_dataset + dataset_name + '_TEST.tsv', sep='\t', header=None)
 
             y_train = df_train.values[:, 0]
             y_test = df_test.values[:, 0]
@@ -223,20 +370,20 @@ def read_all_datasets(root_dir, archive_name, split_val=False):
             x_test = x_test.values
 
             # znorm
-            std_ = x_train.std(axis=1, keepdims=True)
+            std_ = np.nanstd(x_train, axis=1, keepdims=True)
             std_[std_ == 0] = 1.0
-            x_train = (x_train - x_train.mean(axis=1, keepdims=True)) / std_
+            x_train = (x_train - np.nanmean(x_train, axis=1, keepdims=True)) / std_
 
-            std_ = x_test.std(axis=1, keepdims=True)
+            std_ = np.nanstd(x_test, axis=1, keepdims=True)
             std_[std_ == 0] = 1.0
-            x_test = (x_test - x_test.mean(axis=1, keepdims=True)) / std_
+            x_test = (x_test - np.nanmean(x_test, axis=1, keepdims=True)) / std_
 
             datasets_dict[dataset_name] = (x_train.copy(), y_train.copy(), x_test.copy(),
                                            y_test.copy())
 
     else:
         for dataset_name in DATASET_NAMES:
-            root_dir_dataset = cur_root_dir + '/archives/' + archive_name + '/' + dataset_name + '/'
+            root_dir_dataset = cur_root_dir + 'archives/' + archive_name + '/' + dataset_name + '/'
             file_name = root_dir_dataset + dataset_name
             x_train, y_train = readucr(file_name + '_TRAIN')
             x_test, y_test = readucr(file_name + '_TEST')
@@ -363,6 +510,11 @@ def calculate_metrics(y_true, y_pred, duration, y_true_val=None, y_pred_val=None
     return res
 
 
+def perform_wilcoxon(new_method, old_method):
+    wilcoxon_result = stats.wilcoxon(new_method, old_method)
+    print(wilcoxon_result)
+
+
 def save_test_duration(file_name, test_duration):
     res = pd.DataFrame(data=np.zeros((1, 1), dtype=np.float), index=[0],
                        columns=['test_duration'])
@@ -375,33 +527,64 @@ def generate_results_csv(output_file_name, root_dir):
                        columns=['classifier_name', 'archive_name', 'dataset_name',
                                 'precision', 'accuracy', 'recall', 'duration'])
     for classifier_name in CLASSIFIERS:
+        print(classifier_name)
         for archive_name in ARCHIVE_NAMES:
             datasets_dict = read_all_datasets(root_dir, archive_name)
-            for it in range(ITERATIONS):
+            for it in range(0, ITERATIONS):
                 curr_archive_name = archive_name
                 if it != 0:
                     curr_archive_name = curr_archive_name + '_itr_' + str(it)
-                for dataset_name in datasets_dict.keys():
-                    output_dir = root_dir + '/results/' + classifier_name + '/' \
-                                 + curr_archive_name + '/' + dataset_name + '/' + 'df_metrics.csv'
-                    if not os.path.exists(output_dir):
+                for feature in FEATURES:
+                    curr_archive_name_fe = curr_archive_name
+                    if feature != 0:
+                        if 'my_model' not in classifier_name:
+                            continue
+                        params = '_f_' + str(feature)
+                        # if NORMALIZE:
+                        #     params += 'norm'
+                        curr_archive_name_fe += params
+                    elif 'my_model' in classifier_name:
                         continue
-                    df_metrics = pd.read_csv(output_dir)
-                    df_metrics['classifier_name'] = classifier_name
-                    df_metrics['archive_name'] = archive_name
-                    df_metrics['dataset_name'] = dataset_name
-                    res = pd.concat((res, df_metrics), axis=0, sort=False)
+                    without_norm = curr_archive_name_fe
+                    for norm in ['norm', '']:
+                        curr_archive_name_fe = without_norm + norm
+                        for i, met in enumerate(SELECTION):
+                            curr_archive_name_fe_se = curr_archive_name_fe
+
+                            if 'my_model' not in classifier_name:
+                                if i > 0:
+                                    continue
+                            else:
+                                curr_archive_name_fe_se += '_' + met
+                                # curr_archive_name = curr_archive_name
+                            for dataset_name in datasets_dict.keys():
+                                output_dir = root_dir + 'results/' + classifier_name + '/' \
+                                             + curr_archive_name_fe_se + '/' + dataset_name + '/' + 'df_metrics.csv'
+                                # print(output_dir)
+                                if not os.path.exists(output_dir):
+                                    continue
+                                df_metrics = pd.read_csv(output_dir)
+                                df_metrics['classifier_name'] = classifier_name
+                                df_metrics['archive_name'] = archive_name
+                                df_metrics['dataset_name'] = dataset_name
+                                df_metrics['feature_selection_method'] = met
+                                df_metrics['features'] = feature
+                                df_metrics['normalize'] = norm
+
+                                res = pd.concat((res, df_metrics), axis=0, sort=False)
 
     res.to_csv(root_dir + output_file_name, index=False)
     # aggreagte the accuracy for iterations on same dataset
-    res = pd.DataFrame({
-        'accuracy': res.groupby(
-            ['classifier_name', 'archive_name', 'dataset_name'])['accuracy'].mean()
-    }).reset_index()
+    # res = pd.DataFrame({
+    #     'accuracy': res.groupby(
+    #         ['classifier_name', 'archive_name', 'dataset_name'])['accuracy'].mean()
+    # }).reset_index()
 
-    res_agg = res.groupby(['classifier_name', 'archive_name', 'dataset_name'])['accuracy'].agg(['mean', 'std', 'max'])
-    res_agg['res'] = (res_agg['mean'] * 100).round(1).astype(str) + '(' + (res_agg['std'] * 100).round(1).astype(str) + ')'
-    res_agg.reset_index().to_csv(root_dir + 'results_agg.csv', index=False)
+    res_agg = res.groupby(['classifier_name', 'archive_name', 'dataset_name', 'feature_selection_method', 'features', 'normalize'])[
+        'accuracy'].agg(['mean', 'median', 'std', 'max'])
+    res_agg['res'] = (res_agg['mean'] * 100).round(1).astype(str) + '(' + \
+                     (res_agg['std'] * 100).round(1).astype(str) + ')'
+    res_agg.reset_index().to_csv(root_dir + f'results/results_agg_{"".join(CLASSIFIERS)}.csv', index=False)
     return res
 
 
@@ -452,6 +635,7 @@ def save_logs(output_directory, hist, y_pred, y_true, duration, lr=True, y_true_
 
     index_best_model = hist_df['loss'].idxmin()
     row_best_model = hist_df.loc[index_best_model]
+    print(f"index_best_model {index_best_model}, best test performance {df_metrics['accuracy']}")
 
     df_best_model = pd.DataFrame(data=np.zeros((1, 6), dtype=np.float), index=[0],
                                  columns=['best_model_train_loss', 'best_model_val_loss', 'best_model_train_acc',
@@ -530,17 +714,20 @@ def viz_perf_themes(root_dir, df):
     themes_index = []
     # add the themes
     for dataset_name in df.index:
-        themes_index.append(utils.constants.dataset_types[dataset_name])
+        if dataset_name in utils.constants.dataset_types.keys():
+            themes_index.append(utils.constants.dataset_types[dataset_name])
+        else:
+            themes_index.append("unknown")
 
     themes_index = np.array(themes_index)
     themes, themes_counts = np.unique(themes_index, return_counts=True)
     df_themes.index = themes_index
     df_themes = df_themes.rank(axis=1, method='min', ascending=False)
     df_themes = df_themes.where(df_themes.values == 1)
-    df_themes = df_themes.groupby(level=0).sum(axis=1)
+    df_themes = df_themes.groupby(level=0).sum()
     df_themes['#'] = themes_counts
 
-    for classifier in CLASSIFIERS:
+    for classifier in df_themes.columns:
         df_themes[classifier] = df_themes[classifier] / df_themes['#'] * 100
     df_themes = df_themes.round(decimals=1)
     df_themes.to_csv(root_dir + 'tab-perf-theme.csv')
@@ -549,7 +736,7 @@ def viz_perf_themes(root_dir, df):
 def viz_perf_train_size(root_dir, df):
     df_size = df.copy()
     train_sizes = []
-    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCR_TS_Archive_2015')
+    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCRArchive_2018')
     datasets_dict_mts = read_all_datasets(root_dir, archive_name='mts_archive')
     datasets_dict = dict(datasets_dict_ucr, **datasets_dict_mts)
 
@@ -574,7 +761,7 @@ def viz_perf_train_size(root_dir, df):
 def viz_perf_classes(root_dir, df):
     df_classes = df.copy()
     class_numbers = []
-    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCR_TS_Archive_2015')
+    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCRArchive_2018')
     datasets_dict_mts = read_all_datasets(root_dir, archive_name='mts_archive')
     datasets_dict = dict(datasets_dict_ucr, **datasets_dict_mts)
 
@@ -599,7 +786,7 @@ def viz_perf_classes(root_dir, df):
 def viz_perf_length(root_dir, df):
     df_lengths = df.copy()
     lengths = []
-    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCR_TS_Archive_2015')
+    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCRArchive_2018')
     datasets_dict_mts = read_all_datasets(root_dir, archive_name='mts_archive')
     datasets_dict = dict(datasets_dict_ucr, **datasets_dict_mts)
 
@@ -624,7 +811,7 @@ def viz_perf_length(root_dir, df):
 def viz_plot(root_dir, df):
     df_lengths = df.copy()
     lengths = []
-    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCR_TS_Archive_2015')
+    datasets_dict_ucr = read_all_datasets(root_dir, archive_name='UCRArchive_2018')
     datasets_dict_mts = read_all_datasets(root_dir, archive_name='mts_archive')
     datasets_dict = dict(datasets_dict_ucr, **datasets_dict_mts)
 
@@ -643,22 +830,23 @@ def viz_plot(root_dir, df):
     plt.savefig(root_dir + 'plot.pdf')
 
 
-def viz_for_survey_paper(root_dir, filename='results-ucr-mts.csv'):
-    df = pd.read_csv(root_dir + filename, index_col=0)
-    df = df.T
-    df = df.round(decimals=2)
-
+def viz_for_survey_paper(root_dir, filename='results-uea.csv'):
+    df = pd.read_csv(root_dir + filename, index_col=0).iloc[:, :2]
+    # df = df.T
+    # df = df.groupby(['classifier_name', 'archive_name', 'dataset_name'])['accuracy'].mean().reset_index()
+    # df = df.round(decimals=4)
+    # df.set_index()
     # get table performance per themes
-    # viz_perf_themes(root_dir,df)
+    viz_perf_themes(root_dir,df)
 
     # get table performance per train size
-    # viz_perf_train_size(root_dir,df)
+    viz_perf_train_size(root_dir,df)
 
     # get table performance per classes
-    # viz_perf_classes(root_dir,df)
+    viz_perf_classes(root_dir,df)
 
     # get table performance per length
-    # viz_perf_length(root_dir,df)
+    viz_perf_length(root_dir,df)
 
     # get plot
     viz_plot(root_dir, df)
