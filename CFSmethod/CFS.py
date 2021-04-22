@@ -3,7 +3,8 @@ import pandas as pd
 from scipy.stats import entropy
 from collections import OrderedDict
 from typing import Dict, Union, List
-from sklearn.preprocessing import KBinsDiscretizer
+from CFSmethod.mutual_information import su_calculation
+
 
 def get_dists(X: pd.Series, Y: pd.Series):
     '''
@@ -15,6 +16,7 @@ def get_dists(X: pd.Series, Y: pd.Series):
     Y_dist = df.groupby(Y.name).size().div(df.shape[0])
 
     return X_dist, Y_dist, df
+
 
 def HXY(X: pd.Series, Y: pd.Series, base=np.e):
     '''
@@ -59,8 +61,10 @@ def SU(X: pd.Series, Y: pd.Series, base=np.e):
 
     return 2 * IG_XY / (H_X + H_Y)
 
+
 def ig_su(X: pd.Series, Y: pd.Series, base=np.e):
     return IG(X, Y, base=base), SU(X, Y, base=base)
+
 
 def fcbf(X:pd.DataFrame, y:pd.Series, threshold=0.0, base=np.e, is_debug=False) -> Union[Dict[str, int], List]:
     '''
@@ -75,11 +79,10 @@ def fcbf(X:pd.DataFrame, y:pd.Series, threshold=0.0, base=np.e, is_debug=False) 
     '''
 
     S_list= dict()
-    discretizer = KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='uniform')
-    X = pd.DataFrame(discretizer.fit_transform(X), columns=X.columns)
-    for feature in X:
-        Fi = X[feature]
-        SUic = SU(X=Fi, Y=y, base=base)
+    X_disc = X
+    for feature in X_disc:
+        Fi = X_disc[feature]
+        SUic = su_calculation(np.reshape(Fi.values, (len(Fi), 1)), y, input_type='cd')
 
         if SUic > threshold:
             S_list.update({feature: SUic})
@@ -95,7 +98,7 @@ def fcbf(X:pd.DataFrame, y:pd.Series, threshold=0.0, base=np.e, is_debug=False) 
         feature_j, _ = S_list[idx_j]
         if is_debug:
             print('\t', 'Fj = ', feature_j)
-        Fj = X[feature_j]
+        Fj = X_disc[feature_j]
         idx_i = idx_j + 1
 
         if idx_i < len(S_list):
@@ -103,8 +106,8 @@ def fcbf(X:pd.DataFrame, y:pd.Series, threshold=0.0, base=np.e, is_debug=False) 
             SUij_history = []
             for i in range(idx_i, len(S_list)):
                 feature_i, SUic = S_list[i]
-                Fi = X[feature_i]
-                SUij = SU(Fi, Fj, base=base)
+                Fi = X_disc[feature_i]
+                SUij = su_calculation(np.reshape(Fi.values, (len(Fi), 1)), np.reshape(Fj.values, (len(Fj), 1)), input_type='cc')
 
                 if is_debug:
                     print('\t\t', 'Fi = ', feature_i,)

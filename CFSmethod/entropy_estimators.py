@@ -24,7 +24,7 @@ def entropy(x, k=3, base=2):
     tree = ss.cKDTree(x)
     nn = [tree.query(point, k+1, p=float('inf'))[0][k] for point in x]
     const = digamma(N)-digamma(k) + d*log(2)
-    return (const + d*np.mean(map(log, nn)))/log(base)
+    return (const + d*np.mean(list(map(log, nn))))/log(base)
 
 
 def mi(x, y, k=3, base=2):
