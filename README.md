@@ -1,7 +1,7 @@
 # Deep Learning for Time Series Classification with aggregated features
 This repository contains the models and experiments for the paper titled "Deep learning for time series classification with aggregated features"  which is currently under review.
 This paper is part of my MSc thesis.
-![architecture](https://github.com/noabartal/DL-for-TSC-with-agg-features/tree/master/images/diagram.png)
+![architecture](https://github.com/noabartal/DL-for-TSC-with-agg-features/blob/master/images/diagram.png)
 
 ## Data 
 We used two publicly available repositories and one unique data set.
