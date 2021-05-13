@@ -1,0 +1,4 @@
+﻿Model,Baseline accuracy,Extended model accuracy
+FCN,79.51\%,88.12\%
+ResNet,84.1\%,85\%
+InceptionTime,81.8\%,83.96\%

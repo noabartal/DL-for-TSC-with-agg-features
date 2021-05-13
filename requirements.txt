@@ -1,0 +1,10 @@
+tensorflow-gpu==2.1.0
+tsfresh==0.17.0
+scikit-learn==0.23.2
+pandas==1.1.4
+numpy==1.19.4
+matplotlib==3.3.3
+scipy==1.4.1
+
+for feature selection (install if you use it)
+python-weka-wrapper3==0.1.16
