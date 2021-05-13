@@ -92,7 +92,7 @@ ARCHIVE_NAMES = ['UCRArchive_2018']
 
 dataset_names_for_archive = {'UCRArchive_2018': UNIVARIATE_DATASET_NAMES_2018, 'mts_archive': MTS_DATASET_NAMES}
 
-CLASSIFIERS = ['fcn', 'inception', 'resnet', 'my_model_inception', 'my_model_fcn', 'my_model_resnet']
+CLASSIFIERS = ['fcn', 'inception', 'resnet', 'inception_extension', 'fcn_extension', 'resnet_extension']
 NORMALIZE = True
 
 #precentage of the features

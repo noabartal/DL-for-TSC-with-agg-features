@@ -537,13 +537,13 @@ def generate_results_csv(output_file_name, root_dir):
                 for feature in FEATURES:
                     curr_archive_name_fe = curr_archive_name
                     if feature != 0:
-                        if 'my_model' not in classifier_name:
+                        if 'extension' not in classifier_name:
                             continue
                         params = '_f_' + str(feature)
                         # if NORMALIZE:
                         #     params += 'norm'
                         curr_archive_name_fe += params
-                    elif 'my_model' in classifier_name:
+                    elif 'extension' in classifier_name:
                         continue
                     without_norm = curr_archive_name_fe
                     for norm in ['norm', '']:
@@ -551,7 +551,7 @@ def generate_results_csv(output_file_name, root_dir):
                         for i, met in enumerate(SELECTION):
                             curr_archive_name_fe_se = curr_archive_name_fe
 
-                            if 'my_model' not in classifier_name:
+                            if 'extension' not in classifier_name:
                                 if i > 0:
                                     continue
                             else:
