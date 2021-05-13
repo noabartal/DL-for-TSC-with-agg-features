@@ -7,7 +7,7 @@ This paper is part of my MSc thesis.
 We used two publicly available repositories and one unique data set.
 * The [UCR archive](http://www.timeseriesclassification.com/dataset.php), which contains the 128 univariate time series datasets (we use 116 of them). 
 * The [MTS archive](http://www.mustafabaydogan.com/files/viewcategory/20-data-sets.html), which contains the 12 multivariate time series datasets.
-* The [SHRP2 dataset](https://insight.shrp2nds.us./), which contains multivariate vehicle sensors data that used for driver identification task.
+* The [SHRP2 dataset](https://insight.shrp2nds.us/), which contains multivariate vehicle sensors data that used for driver identification task.
 
 ## Code 
 The code is a clone of [ISMAIL FAWAZ git repository](https://github.com/hfawaz/dl-4-tsc), with some adjustments.
@@ -43,11 +43,11 @@ The results on the [UCR_archive](http://www.timeseriesclassification.com/dataset
 The results on the [MTS archive](http://www.mustafabaydogan.com/files/viewcategory/20-data-sets.html) 12 datasets for 
 ResNet, FCN, ResNet with aggregated features, FCN with aggregated features are presented in the [MTS_12_all_classifiers](https://github.com/noabartal/DL-for-TSC-with-agg-features/blob/master/MTS_12_all_classifiers.csv) table.
 
-The results on the [SHRP2 dataset](https://insight.shrp2nds.us./) for 
+The results on the [SHRP2 dataset](https://insight.shrp2nds.us/) for 
  ResNet, InceptionTime, FCN, ResNet with aggregated features, InceptionTime with aggregated features, 
  FCN with aggregated features are presented in the [SHRP2_all_classifiers](https://github.com/noabartal/DL-for-TSC-with-agg-features/blob/master/SHRP2_all_classifiers.csv) table.
 
-## Acknowledgements
+## Reference
 TBA
 
 
