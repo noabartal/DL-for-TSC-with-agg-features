@@ -33,12 +33,7 @@ class Classifier_INCEPTION_TSFRESH:
             if (verbose > 0):
                 self.model.summary()
             self.model.save_weights(self.output_directory + 'model_init.hdf5')
-            # self.model.load_weights(f'{re.sub(r"_f_[0-9a-zA-Z_]+","",self.output_directory.replace("my_model_", ""))}model_init.hdf5', by_name=True)
 
-    # model = keras.models.load_model(
-    #     'D:\\Thesis\\dl-4-tsc\\results\\my_model_inception\\UCRArchive_2018_f_1norm_ecfs\\Adiac\\best_model.hdf5')
-    # model.get_weights()
-    # model.layers[i].set_weights(weights)
 
     def _inception_module(self, input_tensor, stride=1, activation='linear'):
 
