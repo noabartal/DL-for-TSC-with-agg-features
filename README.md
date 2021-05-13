@@ -20,12 +20,12 @@ and three for the deep neural network architectures with our extension.
 
 To run a model on the archive list of datasets (configured in utils/constants) you should issue the following command: 
 ```
-python3 main.py directory_path archive_name classifier_name beginning_iter_number number_of_iterations
+python3 main.py kind_of_run directory_path archive_name classifier_name beginning_iter_number number_of_iterations
 ```
 
 Specific example:
 ```
-python3 main.py DL-for-TSC-with-agg-features\ UCRArchive_2018 inception_extension 0 10
+python3 main.py run_archive DL-for-TSC-with-agg-features\ UCRArchive_2018 inception_extension 0 10
 ```
 
 which means we are launching the [inception_extension](https://github.com/noabartal/DL-for-TSC-with-agg-features/blob/master/classifiers/inception_extension.py) model on the univariate UCR archive (see [constants.py](https://github.com/noabartal/DL-for-TSC-with-agg-features/blob/master/utils/constants.py) for 10 iterations).
