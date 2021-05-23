@@ -18,7 +18,7 @@ The code is a clone of [ISMAIL FAWAZ git repository](https://github.com/hfawaz/d
 * The [classifiers](https://github.com/noabartal/DL-for-TSC-with-agg-features/tree/master/classifiers) folder contains six python files, three for the deep neural network architectures without our extension 
 and three for the deep neural network architectures with our extension.
 
-To run a model on the archive list of datasets (configured in utils/constants) you should issue the following command: 
+To run a model on the archive list of datasets (configured in utils/constants) you should download the data into a folder named "archives/archive_name" and issue the following command: 
 ```
 python3 main.py kind_of_run directory_path archive_name classifier_name beginning_iter_number number_of_iterations
 ```
